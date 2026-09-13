@@ -423,12 +423,21 @@ const ROOMS = {
   },
   old_cabin: {
     name: "Old Cabin",
-    exits: { west: "dense_thicket" },
+    exits: { west: "dense_thicket", east: "cabin_interior" },
     description: "A decrepit cabin sits among the trees. It looks like it hasn't been lived in for decades.",
     lookText: "The cabin's wood is gray and rotting. A heavy lock secures the door. There might be something useful inside.",
     items: [],
     enterable: true,
     locked: true,
+    danger: false,
+    moonExposed: false
+  },
+  cabin_interior: {
+    name: "Cabin Interior",
+    exits: { west: "old_cabin" },
+    description: "Dusty shelves line the walls. A cold fireplace sits in the corner. The air is stale and heavy.",
+    lookText: "Shelves hold dusty JARS, a cold FIREPLACE (never used), and a loose FLOORBOARD in the far corner. A TORCH and MATCHES lean against the shelf.",
+    items: [],
     danger: false,
     moonExposed: false
   },
@@ -520,7 +529,10 @@ function parseCommand(input) {
     case 'use': return cmdUse(args);
     case 'open': return cmdOpen(args);
     case 'read': return cmdRead(args);
+    case 'enter': case 'inside': return cmdEnter(args);
     case 'inventory': case 'inv': case 'i': return cmdInventory();
+    case 'puzzles': case 'quest': case 'tasks': return cmdPuzzles();
+    case 'status': case 'stats': return cmdStatus();
     case 'help': case 'h': case '?': return cmdHelp();
     case 'answer': case 'say': return cmdAnswer(args);
     case 'light': return cmdLight(args);
@@ -590,6 +602,11 @@ function cmdGo(dir) {
     return;
   }
 
+  if (newRoom === 'cabin_interior' && !G.cabinUnlocked) {
+    log("The cabin is locked. You need a KEY.", "danger");
+    return;
+  }
+
   if (newRoom === 'deep_woods') {
     if (!G.deepWoodsWarning) {
       log("The trees grow thicker as you approach. The air turns ice cold.", "danger");
@@ -601,6 +618,59 @@ function cmdGo(dir) {
   G.currentRoom = newRoom;
   advanceTurn();
   describeRoom();
+}
+
+function cmdEnter(target) {
+  if (!target) { log("Enter what? Try ENTER CABIN.", "system"); return; }
+  target = target.toLowerCase();
+
+  if (target.includes('cabin') || target.includes('house') || target.includes('inside') || target.includes('door')) {
+    if (G.currentRoom === 'cabin_interior') {
+      log("You are already inside the cabin.", "system");
+      return;
+    }
+    if (G.currentRoom === 'old_cabin') {
+      if (G.cabinUnlocked) {
+        log("You step inside the old cabin. The floorboards groan beneath you.", "narrative");
+        G.currentRoom = 'cabin_interior';
+        advanceTurn();
+        describeRoom();
+        return;
+      }
+      log("The cabin door is locked. You need a KEY.", "danger");
+      return;
+    }
+  }
+
+  log(`You can't enter "${target}" from here.`, "system");
+}
+
+function cmdPuzzles() {
+  const labels = [
+    ["cabin_lock", "The Cabin Lock - unlock the cabin"],
+    ["cave_inscription", "The Cave Inscriptions - read the cave walls"],
+    ["shrine_riddle", "The Shrine Riddle - answer the shrine's riddle"],
+    ["moon_altar", "The Moon Altar - place the moonstone under moonlight"],
+    ["lake_crossing", "The Lake Crossing - cross the underground lake"]
+  ];
+  log("=== PUZZLES ===", "system");
+  labels.forEach(([id, label]) => {
+    const done = G.puzzlesSolved[id];
+    log(`  ${done ? '[SOLVED]' : '[ ?? ]'} ${label}`, done ? "success" : "narrative");
+  });
+  log(`Solved: ${G.puzzleCount}/${G.totalPuzzles}`, "item");
+}
+
+function cmdStatus() {
+  const health = G.health || 5;
+  log("=== STATUS ===", "system");
+  log(`  Location: ${ROOMS[G.currentRoom].name}`, "narrative");
+  log(`  Turn: ${G.turn}`, "system");
+  log(`  Health: ${health}/5`, health > 2 ? "success" : "danger");
+  log(`  Moon: ${G.moonlitNow ? 'MOONLIT (safe in open areas)' : 'clouded (dangerous)'}`, G.moonlitNow ? "moon" : "danger");
+  log(`  Entity: ${G.entityActive ? G.entityName + ' is stalking you' : 'has not awakened... yet'}`, G.entityActive ? "danger" : "system");
+  log(`  Puzzles: ${G.puzzleCount}/${G.totalPuzzles} - type PUZZLES for details`, "item");
+  log(`  Inventory: ${G.inventory.length > 0 ? G.inventory.map(i => i.replace(/_/g,' ').toUpperCase()).join(', ') : '(empty)'}`, "item");
 }
 
 function cmdLook(target) {
@@ -627,6 +697,12 @@ function cmdLook(target) {
         log('"Answer the riddle of the shrine. Place the moonstone under open sky. The lake must be crossed by rope and faith."', "item");
         log("The words are burned into the stone, as if by fire.", "narrative");
         if (!G.caveExplored) { G.caveExplored = true; }
+        if (!G.puzzlesSolved.cave_inscription) {
+          G.puzzlesSolved.cave_inscription = true;
+          G.puzzleCount++;
+          updatePuzzleProgress();
+          log("[PUZZLE 2/5 SOLVED: The Cave Inscriptions]", "success");
+        }
         return;
       } else if (G.currentRoom === 'dark_cave' && !G.torchLit) {
         log("You can feel carvings on the walls but it's too dark to read them.", "danger");
@@ -700,8 +776,11 @@ function cmdLook(target) {
   if (G.currentRoom === 'old_cabin' && !G.cabinUnlocked) {
     log("The door is LOCKED. A heavy iron lock hangs on it.", "narrative");
   } else if (G.currentRoom === 'old_cabin' && G.cabinUnlocked) {
+    log("The door hangs open. Type ENTER to go inside.", "narrative");
+  } else if (G.currentRoom === 'cabin_interior') {
     if (!G.cabinSearched) {
       log("Inside you notice: shelves with dusty JARS, a cold FIREPLACE, and something GLINTING under the floorboards.", "item");
+      G.cabinSearched = true;
     } else {
       log("You've searched everything in the cabin.", "system");
     }
@@ -721,7 +800,7 @@ function cmdTake(item) {
 
   const roomItems = getCurrentItems();
 
-  if (G.currentRoom === 'old_cabin' && G.cabinUnlocked) {
+  if (G.currentRoom === 'old_cabin' && G.cabinUnlocked || G.currentRoom === 'cabin_interior') {
     if ((item === 'torch' || item === 'matches' || item === 'lantern') && !G.torchFound) {
       G.torchFound = true;
       G.inventory.push('torch');
@@ -793,6 +872,13 @@ function cmdUse(item) {
         removeItem('key');
         log("*CLICK* The old lock falls away. The cabin door creaks open.", "success");
         log("A musty smell rushes out. Warm light from your torch spills inside.", "narrative");
+        if (!G.puzzlesSolved.cabin_lock) {
+          G.puzzlesSolved.cabin_lock = true;
+          G.puzzleCount++;
+          updatePuzzleProgress();
+          log("[PUZZLE 1/5 SOLVED: The Cabin Lock]", "success");
+        }
+        log("Type ENTER to go inside.", "system");
         ROOMS.old_cabin.locked = false;
         return;
       } else {
@@ -833,17 +919,20 @@ function cmdUse(item) {
         log("You place the MOONSTONE into the crescent depression on the pedestal...", "narrative");
         if (G.moonlitNow) {
           G.shrineSolved = true;
-          G.puzzlesSolved.shrine_riddle = true;
-          G.puzzleCount++;
           removeItem('moonstone');
           G.moonstoneUsed = true;
           log("The moonstone catches the moonlight and BLAZES with silver fire!", "success");
           log("Ancient carvings illuminate around the circle. The shrine awakens.", "success");
+          if (!G.puzzlesSolved.moon_altar) {
+            G.puzzlesSolved.moon_altar = true;
+            G.puzzleCount++;
+            updatePuzzleProgress();
+            log("[PUZZLE 4/5 SOLVED: The Moon Altar]", "success");
+          }
           log("A section of the pedestal slides open, revealing a MAP FRAGMENT.", "item");
           G.inventory.push('map_fragment_1');
           G.altarMapFound = true;
           updateInventory();
-          updatePuzzleProgress();
           return;
         } else {
           log("You place the moonstone, but nothing happens. The moon is hidden behind clouds...", "danger");
@@ -944,6 +1033,12 @@ function cmdRead(target) {
     if (G.currentRoom === 'dark_cave' && G.torchLit) {
       log('"Answer the riddle of the shrine. Place the moonstone under open sky. The lake must be crossed by rope and faith."', "item");
       if (!G.caveExplored) { G.caveExplored = true; }
+      if (!G.puzzlesSolved.cave_inscription) {
+        G.puzzlesSolved.cave_inscription = true;
+        G.puzzleCount++;
+        updatePuzzleProgress();
+        log("[PUZZLE 2/5 SOLVED: The Cave Inscriptions]", "success");
+      }
       return;
     } else if (G.currentRoom === 'dark_cave') {
       log("Too dark to read anything.", "danger");
@@ -974,12 +1069,15 @@ function cmdAnswer(answer) {
     log(`The shrine whispers: "${G.riddle.q}"`, "entity");
 
     if (G.riddle.a.some(a => answer.includes(a) || a.includes(answer))) {
-      G.puzzlesSolved.shrine_riddle = true;
-      G.puzzleCount++;
+      if (!G.puzzlesSolved.shrine_riddle) {
+        G.puzzlesSolved.shrine_riddle = true;
+        G.puzzleCount++;
+        updatePuzzleProgress();
+        log("[PUZZLE 3/5 SOLVED: The Shrine Riddle]", "success");
+      }
       G.shrineSolved = true;
       log("The stones groan and shift. Ancient magic stirs!", "success");
       log("The pedestal illuminates. You may now place a MOONSTONE here.", "narrative");
-      updatePuzzleProgress();
       return;
     } else {
       log("The shrine falls silent. That doesn't seem right...", "danger");
@@ -1017,33 +1115,20 @@ function cmdCross() {
       log("On the far shore, wedged between rocks, you find a MAP FRAGMENT!", "item");
       updateInventory();
     }
-    G.puzzlesSolved.lake_crossing = true;
-    G.puzzleCount++;
-    updatePuzzleProgress();
+    if (!G.puzzlesSolved.lake_crossing) {
+      G.puzzlesSolved.lake_crossing = true;
+      G.puzzleCount++;
+      updatePuzzleProgress();
+      log("[PUZZLE 5/5 SOLVED: The Lake Crossing]", "success");
+    }
     return;
   }
   log("There's nothing to cross here.", "system");
 }
 
 function cmdSolve(args) {
-  if (!args) {
-    log("Usage: SOLVE [puzzle name] - attempt to solve a puzzle you've figured out.", "system");
-    return;
-  }
-  args = args.toLowerCase();
-
-  if (args.includes('cabin') || args.includes('lock')) {
-    if (G.currentRoom === 'old_cabin' && G.cabinUnlocked && !G.puzzlesSolved.cave_inscription) {
-      G.puzzlesSolved.cabin_lock = true;
-      G.puzzleCount++;
-      log("The cabin's secret is revealed - the inscriptions match the entity's weakness!", "success");
-      log("A hidden drawer opens, revealing the cabin's final secret.", "narrative");
-      updatePuzzleProgress();
-      return;
-    }
-  }
-
-  log(`You haven't figured out how to solve that yet.`, "system");
+  log("Puzzles are solved through actions, not a SOLVE command. Type PUZZLES to see your progress.", "system");
+  return cmdPuzzles();
 }
 
 function cmdPray() {
@@ -1207,6 +1292,7 @@ function cmdHelp() {
   log("  OPEN [thing] - open something", "system");
   log("  READ [thing] - read something", "system");
   log("  LIGHT [thing] - light something", "system");
+  log("  ENTER [place] - go inside (e.g. ENTER CABIN)", "system");
   log("  CROSS - cross a body of water", "system");
   log("  ANSWER [answer] - answer a riddle", "system");
   log("  PRAY - pray at a shrine", "system");
@@ -1216,6 +1302,8 @@ function cmdHelp() {
   log("  THROW [item] - throw something", "system");
   log("  COMBINE [items] - combine items", "system");
   log("  INVENTORY (INV/I) - check items", "system");
+  log("  PUZZLES - track the five puzzles", "system");
+  log("  STATUS - your health and situation", "system");
   log("  MAP - view map if you have one", "system");
   log("  HINT - get a contextual hint", "system");
   log("  HISTORY - view command history", "system");
@@ -1227,12 +1315,12 @@ function cmdHint() {
 
   if (!G.keyFound) hints.push("Look around the forest for a key. Try searching near trees...");
   if (G.keyFound && !G.cabinUnlocked) hints.push("Take the key to the cabin door. Use KEY on the cabin.");
-  if (G.cabinUnlocked && !G.torchFound) hints.push("Search the cabin interior. Use LOOK to find items.");
+  if (G.cabinUnlocked && !G.torchFound) hints.push("Enter the cabin and search inside. The torch and matches are in there. Type ENTER CABIN.");
   if (G.torchFound && !G.torchLit) hints.push("Light the torch with the matches. USE TORCH or LIGHT TORCH.");
-  if (G.torchLit && !G.caveExplored) hints.push("Enter the dark cave. The torch will reveal inscriptions.");
-  if (G.caveExplored && !G.moonstoneFound) hints.push("Return to the cave. Look for the MOONSTONE.");
-  if (G.moonstoneFound && !G.shrineSolved) hints.push("Go to the shrine. PRAY or ANSWER the riddle.");
-  if (G.shrineSolved && !G.moonstoneUsed) hints.push("Use the MOONSTONE at the shrine under moonlight.");
+  if (G.torchLit && !G.caveExplored) hints.push("Enter the dark cave. The torch will reveal inscriptions. Use your torch.");
+  if (G.caveExplored && !G.moonstoneFound && !G.moonstoneUsed) hints.push("Return to the cave. Look for the MOONSTONE.");
+  if (G.moonstoneFound && !G.shrineSolved && !G.puzzlesSolved.shrine_riddle) hints.push("Go to the shrine. PRAY or ANSWER the riddle. The answer is a single word.");
+  if (G.shrineSolved && !G.moonstoneUsed && !G.puzzlesSolved.moon_altar) hints.push("Use the MOONSTONE at the shrine under moonlight.");
   if (G.moonstoneUsed && !G.ropeFound) hints.push("Find a ROPE. Check the cave entrance or forest edge.");
   if (G.ropeFound && !G.ropeUsed) hints.push("Use the ROPE at the underground lake.");
   if (!G.ropeUsed && !G.lakeCrossed) hints.push("Cross the lake to find the second map fragment.");
@@ -1676,7 +1764,7 @@ function startGame() {
   log("Find all five puzzles. Collect the map. Escape the forest.", "narrative");
   log("Or be consumed by what lurks in the dark.", "danger");
   log("", "system");
-  log("Type HELP for commands. Type HINT if you're stuck.", "system");
+  log("Type HELP for commands. Type HINT if you're stuck. Type PUZZLES to track your progress.", "system");
   log("", "system");
 
   updatePuzzleProgress();
