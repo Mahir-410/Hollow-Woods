@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>THE HOLLOW WOODS - ASCII Horror</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="game-container">
+
+  <!-- TITLE SCREEN -->
+  <div id="title-screen">
+    <div id="title-art">
+                  ,@@@@@@@,
+          ,,,.   ,@@@@@@/@@,  .oo8888o.
+       ,&%%&%&&%,@@@@@/@@@@@@,8888\88/8o
+      ,%&\%&&%&&%,@@@\@@@/@@@88\88888/88'
+      %&&%&%&/%&&%@@\@@/ /@@@88888\88888'
+      %&&%/ %&%%&&@@\ V /@@' `88\8 `/88'
+      `&%\ ` /%&'    |.|        \ '|8'
+          |o|        | |         | |
+          |.|        | |         | |
+       \\/ ._\//_/__/  ,\_//__\\/.  \_//__/_
+    </div>
+    <div id="title-text">THE HOLLOW WOODS</div>
+    <button id="start-btn" onclick="startGame()">[ BEGIN ]</button>
+    <div id="title-warning">
+      A text-based horror experience. Type commands to navigate.<br>
+      The entity hunts in darkness. The moon is your only ally.<br>
+      Solve all puzzles to find the way out... or be consumed.
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen">
+    <div id="header">
+      <span id="loc-display" class="location">???</span>
+      <div class="status">
+        <span><span id="moon-indicator"></span> Moon</span>
+        <span id="turn-display">Turn: 0</span>
+      </div>
+    </div>
+    <div id="puzzle-progress">Puzzles: [ ] [ ] [ ] [ ] [ ]</div>
+    <div id="ascii-display"></div>
+    <div id="message-log"></div>
+    <div id="inventory-bar">Inventory: (empty)</div>
+    <div id="entity-warning">~ You feel a presence watching you... ~</div>
+    <div id="quick-actions">
+      <button class="quick-btn" onclick="sendCmd('look')">LOOK</button>
+      <button class="quick-btn" onclick="sendCmd('inventory')">INV</button>
+      <button class="quick-btn" onclick="sendCmd('go north')">N</button>
+      <button class="quick-btn" onclick="sendCmd('go south')">S</button>
+      <button class="quick-btn" onclick="sendCmd('go east')">E</button>
+      <button class="quick-btn" onclick="sendCmd('go west')">W</button>
+      <button class="quick-btn" onclick="sendCmd('help')">HELP</button>
+    </div>
+    <div id="input-area">
+      <input id="command-input" type="text" placeholder="Type a command..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button id="submit-btn" onclick="submitCommand()">SEND</button>
+    </div>
+  </div>
+
+  <!-- ENDING SCREEN -->
+  <div id="ending-screen">
+    <div id="ending-art"></div>
+    <div id="ending-title"></div>
+    <div id="ending-text"></div>
+    <button id="restart-btn" onclick="location.reload()">[ PLAY AGAIN ]</button>
+  </div>
+
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
